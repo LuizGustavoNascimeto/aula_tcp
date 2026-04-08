@@ -6,9 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"path"
+	"path/filepath"
 	"strings"
 	"tcp_server/src/session"
 	"tcp_server/src/user"
+	"tcp_server/src/utils"
 	"time"
 )
 
@@ -27,7 +30,7 @@ func appLog(origin string, format string, args ...interface{}) {
 }
 
 func (s *Server) writeResponse(conn net.Conn, payload string) {
-	_, _ = conn.Write([]byte(payload))
+	_, _ = conn.Write([]byte(payload + "\n"))
 }
 
 func NewServer(addr string) *Server {
@@ -86,7 +89,7 @@ func (s *Server) handleMessage(conn net.Conn, msg string) {
 	command := strings.Split(msg, " ")
 
 	if len(command) == 0 {
-		s.writeResponse(conn, "NACK: INVALID_COMMAND\n")
+		s.writeResponse(conn, "ERROR: INVALID_COMMAND")
 	}
 
 	if command[0] == "CONNECT" {
@@ -94,28 +97,26 @@ func (s *Server) handleMessage(conn net.Conn, msg string) {
 		return
 	}
 	if command[0] == "PWD" {
-		s.commandPWD(conn, command)
+		s.commandPWD(conn)
 		return
 	}
 	if command[0] == "CHDIR" {
 		s.commandCHDIR(conn, command)
 		return
 	}
-
-	s.writeResponse(conn, "ACK: "+msg+"\n")
 }
 
 func (s *Server) commandConnect(conn net.Conn, command []string) {
 	if len(command) < 3 {
 		appLog(originServer, "CONNECT invalido de %s", conn.RemoteAddr().String())
-		s.writeResponse(conn, "NACK: INVALID_COMMAND\n")
+		s.writeResponse(conn, "ERROR: INVALID_COMMAND")
 		return
 	}
 
 	pass, err := hex.DecodeString(command[2])
 	if err != nil {
 		appLog(originServer, "hash invalido recebido de %s para usuario %s", conn.RemoteAddr().String(), command[1])
-		s.writeResponse(conn, "NACK: INVALID_HASH\n")
+		s.writeResponse(conn, "ERROR: INVALID_HASH")
 		return
 	}
 
@@ -123,24 +124,23 @@ func (s *Server) commandConnect(conn net.Conn, command []string) {
 		rootDir := fmt.Sprintf("/%s", command[1])
 		s.session.Create(session.Session{ID: conn.RemoteAddr().String(), CurrDir: rootDir, User: command[1], RootDir: rootDir})
 		appLog(originServer, "usuario %s autenticado com sucesso (%s)", command[1], conn.RemoteAddr().String())
-		s.writeResponse(conn, "ACK: SUCCESS\n")
+		s.writeResponse(conn, "SUCCESS")
 		return
 	}
 
 	appLog(originServer, "falha de autenticacao para usuario %s (%s)", command[1], conn.RemoteAddr().String())
 
-	s.writeResponse(conn, "NACK: ERROR\n")
+	s.writeResponse(conn, "ERROR")
 }
 
-func (s *Server) commandPWD(conn net.Conn, command []string) {
+func (s *Server) commandPWD(conn net.Conn) {
 	session, exists := s.session.Retrieve(conn.RemoteAddr().String())
 	if !exists {
 		appLog(originServer, "PWD negado para %s: usuario nao autenticado", conn.RemoteAddr().String())
-		s.writeResponse(conn, "NACK: NOT_AUTHENTICATED\n")
+		s.writeResponse(conn, "ERROR: NOT_AUTHENTICATED")
 		return
 	}
 	appLog(originServer, "PWD de %s (%s): %s", session.User, conn.RemoteAddr().String(), session.CurrDir)
-	s.writeResponse(conn, "ACK: "+command[0]+"\n")
 	s.writeResponse(conn, session.CurrDir)
 }
 
@@ -148,13 +148,13 @@ func (s *Server) commandPWD(conn net.Conn, command []string) {
 func (s *Server) commandCHDIR(conn net.Conn, command []string) {
 	if len(command) < 2 {
 		appLog(originServer, "CHDIR invalido de %s", conn.RemoteAddr().String())
-		s.writeResponse(conn, "NACK: ERROR\n")
+		s.writeResponse(conn, "ERROR")
 		return
 	}
 	userSession, exists := s.session.Retrieve(conn.RemoteAddr().String())
 	if !exists {
 		appLog(originServer, "CHDIR negado para %s: usuario nao autenticado", conn.RemoteAddr().String())
-		s.writeResponse(conn, "NACK: ERROR\n")
+		s.writeResponse(conn, "ERROR")
 		return
 	}
 	newDir := command[1]
@@ -163,16 +163,26 @@ func (s *Server) commandCHDIR(conn net.Conn, command []string) {
 	}
 	if !isValidDir(userSession.RootDir, newDir) {
 		appLog(originServer, "CHDIR invalido para usuario %s: %s", userSession.User, newDir)
-		s.writeResponse(conn, "NACK: INVALID_DIRECTORY\n")
+		s.writeResponse(conn, "ERROR: INVALID_DIRECTORY")
 		return
 	}
 	s.session.Update(userSession.ID, newDir)
 	appLog(originServer, "usuario %s alterou diretorio para %s", userSession.User, newDir)
-	s.writeResponse(conn, "ACK: SUCCESS\n")
+	s.writeResponse(conn, "SUCCESS")
 
 }
 
 func isValidDir(root string, newDir string) bool {
-	//como é por caminho global, só precisa verificar se o novo caminho começa com o root
-	return strings.HasPrefix(newDir, root)
+	// root/newDir sao caminhos logicos (com '/'), por isso usamos path.Clean
+	cleanRoot := path.Clean("/" + strings.TrimPrefix(root, "/"))
+	cleanNewDir := path.Clean("/" + strings.TrimPrefix(newDir, "/"))
+
+	if cleanNewDir != cleanRoot && !strings.HasPrefix(cleanNewDir, cleanRoot+"/") {
+		return false
+	}
+
+	relativeDir := filepath.FromSlash(strings.TrimPrefix(cleanNewDir, "/"))
+	targetDir := filepath.Join("users_files", relativeDir)
+
+	return utils.DirExists(targetDir)
 }

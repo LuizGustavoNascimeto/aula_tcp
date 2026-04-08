@@ -3,9 +3,7 @@ package main
 import (
 	"bufio"
 	"crypto/sha512"
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"strings"
@@ -16,6 +14,12 @@ const (
 	originClient = "cliente"
 	originServer = "servidor"
 )
+
+var validCommands = map[string]struct{}{
+	"CONNECT": {},
+	"PWD":     {},
+	"CHDIR":   {},
+}
 
 func appLog(origin string, format string, args ...interface{}) {
 	timestamp := time.Now().Format("2006/01/02 15:04:05")
@@ -47,50 +51,48 @@ func connect() net.Conn {
 
 func sendMessage(conn net.Conn, reader *bufio.Reader, message string) {
 	c := handleCommand(message)
-	appLog(originClient, "enviando: %s", summarizeCommand(c))
 	_, err := conn.Write([]byte(c + "\n"))
 	if err != nil {
 		appLog(originClient, "erro ao enviar comando: %v", err)
 		return
 	}
 
-	if isPWDCommand(message) {
-		handlePWDResponse(conn, reader)
+	if hasResponse(message) {
+		handleResponse(conn, reader)
 		return
 	}
-
-	resp, err := reader.ReadString('\n')
-	if err != nil {
-		appLog(originClient, "erro ao ler resposta: %v", err)
-		return
-	}
-
-	appLog(originServer, strings.TrimSpace(resp))
 }
 
 func readTerminal() string {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Comando: ")
+	fmt.Print(">>> ")
 	text, _ := reader.ReadString('\n')
 	return strings.TrimSpace(text)
 }
 
+/*Isso só existe para poder fazer a hash*/
 func handleCommand(msg string) string {
 	command := strings.Fields(msg)
-	if len(command) >= 3 && command[0] == "CONNECT" {
+	if len(command) >= 3 && isCommand(command[0]) && command[0] == "CONNECT" {
 		msg = commandAuth(command[1], command[2])
 	}
 	return msg
 }
 
+/*Isso tbm só existe para poder fazer a hash*/
 func commandAuth(login string, password string) string {
 	pass := sha512.Sum512([]byte(password))
 	return fmt.Sprintf("CONNECT %s %x", login, pass)
 }
 
-func isPWDCommand(message string) bool {
+func hasResponse(message string) bool {
 	command := strings.Fields(message)
-	return len(command) > 0 && command[0] == "PWD"
+	return len(command) > 0 && isCommand(command[0])
+}
+
+func isCommand(value string) bool {
+	_, exists := validCommands[value]
+	return exists
 }
 
 func summarizeCommand(message string) string {
@@ -106,44 +108,11 @@ func summarizeCommand(message string) string {
 	return message
 }
 
-func handlePWDResponse(conn net.Conn, reader *bufio.Reader) {
-	ack, err := reader.ReadString('\n')
+func handleResponse(conn net.Conn, reader *bufio.Reader) {
+	dir, err := reader.ReadString('\n')
 	if err != nil {
-		appLog(originClient, "erro ao ler ACK do PWD: %v", err)
+		appLog(originClient, "erro ao ler respota: %v", err)
 		return
 	}
-	appLog(originServer, strings.TrimSpace(ack))
-
-	if strings.TrimSpace(ack) != "ACK: PWD" {
-		return
-	}
-
-	dir, err := readPWDDir(conn, reader)
-	if err != nil {
-		appLog(originClient, "erro ao ler diretorio atual: %v", err)
-		return
-	}
-
-	appLog(originServer, "Diretorio atual: %s", dir)
-	_, _ = conn.Write([]byte("ACK: PWD_RECEIVED\n"))
-	appLog(originClient, "confirmacao de PWD enviada")
-}
-
-func readPWDDir(conn net.Conn, reader *bufio.Reader) (string, error) {
-	_ = conn.SetReadDeadline(time.Now().Add(700 * time.Millisecond))
-	defer conn.SetReadDeadline(time.Time{})
-
-	buf := make([]byte, 512)
-	n, err := reader.Read(buf)
-	if err != nil {
-		if ne, ok := err.(net.Error); ok && ne.Timeout() {
-			return "", errors.New("timeout esperando diretorio do PWD")
-		}
-		if errors.Is(err, io.EOF) {
-			return "", errors.New("conexao encerrada antes de receber diretorio")
-		}
-		return "", err
-	}
-
-	return strings.TrimSpace(string(buf[:n])), nil
+	appLog(originServer, "%s", dir)
 }
