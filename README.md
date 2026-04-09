@@ -1,71 +1,156 @@
-# Atividade 1 - Programação com Sockets TCP
+# Sistema Cliente-Servidor TCP em Go
 
-Projeto da disciplina **Sistemas Distribuídos** Prof. Rodrigo Campiolo.
+Este projeto foi desenvolvido como atividade avaliativa da disciplina Sistemas Distribuídos, ministrada pelo professor doutor Rodrigo Cambiolo.
 
-Este repositório contém uma implementação simples de comunicação **cliente-servidor usando TCP** em Go.
-O foco da atividade é praticar sockets TCP, troca de mensagens em formato texto (String UTF) e suporte a múltiplos clientes.
+O objetivo é implementar uma aplicação cliente-servidor com sockets TCP, autenticação simples e comandos de navegação em diretórios por sessão de usuário.
+
+## Visão geral
+
+O sistema é composto por:
+
+- um servidor TCP que escuta na porta 8080;
+- um cliente de terminal que envia comandos em texto;
+- gerenciamento de sessão por conexão;
+- acesso restrito a diretórios de cada usuário dentro da pasta users_files.
+
+Cada conexão de cliente é tratada em uma goroutine independente no servidor.
 
 ## Estrutura do projeto
 
-- `server/server.go`: inicia o servidor TCP na porta `8080`, aceita múltiplas conexões e responde cada mensagem com `ACK: <mensagem>`.
-- `client/client.go`: conecta ao servidor TCP, lê texto do terminal, envia ao servidor e valida a resposta.
-
-## Como funciona
-
-1. O servidor abre a porta `:8080`.
-2. Cada cliente que conecta é tratado em uma goroutine separada (concorrência).
-3. O cliente envia uma mensagem (texto digitado no terminal).
-4. O servidor recebe e responde com um ACK.
+- client/client.go: cliente TCP interativo via terminal.
+- tcp_server/main.go: ponto de entrada do servidor.
+- tcp_server/src/server: lógica de rede, leitura e resposta de comandos.
+- tcp_server/src/commands: implementação dos comandos suportados.
+- tcp_server/src/session: controle de sessões por cliente conectado.
+- tcp_server/src/user: controle de usuários e autenticação.
+- tcp_server/src/utils: validações e listagem de diretórios/arquivos.
+- users_files: área de arquivos acessível pelo servidor.
 
 ## Pré-requisitos
 
-- Go instalado (versão 1.20+ recomendada).
-- Terminal (PowerShell, CMD, Git Bash ou terminal integrado do VS Code).
+- Go instalado (versão 1.25.1 ou superior recomendada).
+- Terminal (Git Bash, PowerShell, CMD ou terminal integrado do VS Code).
 
-## Como rodar o projeto
+## Como executar
 
-No diretório raiz do projeto (`aula_tcp`), siga os passos:
+### 1. Iniciar o servidor
 
-1. Inicie o servidor:
-
-```bash
-go run server/server.go
-```
-
-2. Em outro terminal, inicie um cliente:
+No terminal 1:
 
 ```bash
-go run client/client.go
+cd tcp_server
+go run ./
 ```
 
-3. Digite uma mensagem no terminal do cliente e pressione Enter.
+O servidor ficará ouvindo em :8080.
 
-4. Observe:
+### 2. Iniciar o cliente
 
-- No servidor: mensagem recebida do cliente.
-- No cliente: confirmação da resposta `ACK`.
-
-## Testar múltiplos clientes
-
-Para validar que o servidor atende múltiplos clientes, abra mais terminais e execute novamente:
+No terminal 2, a partir da raiz do projeto:
 
 ```bash
 go run client/client.go
 ```
 
-Cada cliente pode enviar mensagens de forma independente.
+Você verá o prompt:
 
-## Observações
+```text
+>>>
+```
 
-- A leitura de mensagens está baseada em `\n` (Enter no terminal), ou seja, cada mensagem deve terminar com quebra de linha.
-- Se o servidor não estiver ativo, o cliente não consegue conectar.
-- A porta padrão do projeto é `8080`.
+## Comandos disponíveis no cliente
 
-## Contexto acadêmico
+### CONNECT
 
-Este projeto foi feito como atividade prática de faculdade para reforçar conceitos de:
+Formato esperado:
 
-- sockets TCP;
+```text
+CONNECT usuario, senha
+```
+
+Exemplo:
+
+```text
+CONNECT admin, password
+```
+
+Observação: o cliente transforma automaticamente a senha em hash antes de enviar para o servidor.
+
+### PWD
+
+Retorna o diretório atual da sessão.
+
+```text
+PWD
+```
+
+### CHDIR
+
+Muda o diretório atual da sessão (somente dentro da raiz autorizada do usuário).
+
+```text
+CHDIR /admin
+CHDIR /admin/fotos
+```
+
+### GETDIRS
+
+Lista subdiretórios do diretório atual.
+
+```text
+GETDIRS
+```
+
+### GETFILES
+
+Lista arquivos do diretório atual.
+
+```text
+GETFILES
+```
+
+### EXIT
+
+Encerra a sessão no servidor e fecha a conexão do cliente.
+
+```text
+EXIT
+```
+
+## Usuário padrão para testes
+
+O servidor cria automaticamente o usuário abaixo na inicialização:
+
+- usuário: admin
+- senha: password
+
+## Fluxo sugerido de teste
+
+Após iniciar servidor e cliente, execute:
+
+```text
+CONNECT admin, password
+PWD
+GETDIRS
+CHDIR /admin/fotos
+PWD
+GETFILES
+EXIT
+```
+
+## Possíveis erros comuns
+
+- ERROR: NOT_AUTHENTICATED: enviado comando sem autenticação prévia.
+- ERROR: INVALID_COMMAND: sintaxe inválida do comando.
+- ERROR: INVALID_DIRECTORY: tentativa de acessar diretório fora da raiz permitida.
+- erro ao conectar: servidor não está em execução na porta 8080.
+
+## Objetivo pedagógico
+
+Este projeto reforça os seguintes conceitos:
+
+- comunicação cliente-servidor com TCP;
 - concorrência com goroutines;
-- comunicação cliente-servidor;
-- noções iniciais de sistemas distribuídos.
+- controle de sessão por conexão;
+- validação de acesso a diretórios;
+- organização de código em camadas (comandos, sessão, servidor e utilitários).
