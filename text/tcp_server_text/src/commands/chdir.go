@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"tcp_server/src/session"
-	"tcp_server/src/utils"
+	"tcp_server_text/src/session"
+	"tcp_server_text/src/utils"
 )
 
 func CHDIR(address string, command []string, sessionRepo *session.Repository) string {

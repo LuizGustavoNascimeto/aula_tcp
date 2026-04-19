@@ -3,8 +3,8 @@ package commands
 import (
 	"fmt"
 	"strings"
-	"tcp_server/src/session"
-	"tcp_server/src/utils"
+	"tcp_server_text/src/session"
+	"tcp_server_text/src/utils"
 )
 
 func GETDIRS(address string, sessionRepo *session.Repository) string {

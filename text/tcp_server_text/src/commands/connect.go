@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"tcp_server/src/session"
-	"tcp_server/src/user"
+	"tcp_server_text/src/session"
+	"tcp_server_text/src/user"
 )
 
 func Connect(address string, command []string, userRepo *user.Repository, sessionRepo *session.Repository) string {

@@ -3,10 +3,12 @@ package server
 import (
 	"bufio"
 	"crypto/sha512"
+	"fmt"
 	"net"
+	"os"
 	"strings"
-	"tcp_server/src/session"
-	"tcp_server/src/user"
+	"tcp_server_text/src/session"
+	"tcp_server_text/src/user"
 )
 
 type Server struct {
@@ -55,6 +57,11 @@ func (s *Server) Run() error {
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	defer AppLog(originServer, "conexao encerrada com %s", conn.RemoteAddr().String())
+	mode := os.Args[1]
+	fmt.Println(mode)
+	if mode == "byte" {
+		AppLog(originServer, "AVERIGUANDO RESENHA")
+	}
 
 	reader := bufio.NewReader(conn)
 	for {
@@ -65,5 +72,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 
 		s.handleMessage(conn, strings.TrimSpace(msg))
+
 	}
 }

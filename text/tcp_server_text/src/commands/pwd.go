@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"tcp_server/src/session"
+	"tcp_server_text/src/session"
 )
 
 func PWD(address string, sessionRepo *session.Repository) string {

@@ -3,7 +3,7 @@ package server
 import (
 	"net"
 	"strings"
-	"tcp_server/src/commands"
+	"tcp_server_text/src/commands"
 )
 
 func (s *Server) handleMessage(conn net.Conn, msg string) {

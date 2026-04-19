@@ -2,7 +2,7 @@ package main
 
 import (
 	"log"
-	app "tcp_server/src/server"
+	app "tcp_server_text/src/server"
 )
 
 func main() {
