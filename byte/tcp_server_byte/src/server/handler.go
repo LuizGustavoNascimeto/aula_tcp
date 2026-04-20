@@ -16,13 +16,37 @@ func (s *Server) handleMessage(conn net.Conn, reader *bufio.Reader, msg *datagra
 	case datagram.ADDFILE:
 		//esse resposta infica que o servidor está pronto para receber o arquivo
 		s.WriteResponse(conn, datagram.CreateRes(datagram.ADDFILE, datagram.STATUS_SUCCESS))
+
 		status, err := commands.ADDFILE(reader, msg.Filename, msg.GetFileSize())
 		if err != nil {
 			AppLog(conn.RemoteAddr().String(), "erro ao processar comando ADDFILE: %v", err)
 		}
 		res = *datagram.CreateRes(datagram.ADDFILE, status)
-	// case "PWD":
-	// 	response = commands.PWD(address, s.sessions)
+	case datagram.GETFILESLIST:
+		files, err := commands.GETFILESLIST(reader)
+		if err != nil {
+			AppLog(conn.RemoteAddr().String(), "erro ao processar comando GETFILESLIST: %v", err)
+			res = *datagram.CreateRes(datagram.GETFILESLIST, datagram.STATUS_ERROR)
+		} else {
+			res = *datagram.CreateRes(datagram.GETFILESLIST, datagram.STATUS_SUCCESS)
+			res.SetFiles(files)
+		}
+	case datagram.GETFILE:
+		fileBytes, status, err := commands.GETFILE(msg.Filename)
+		if err != nil {
+			AppLog(conn.RemoteAddr().String(), "erro ao processar comando GETFILE: %v", err)
+		}
+		res = *datagram.CreateRes(datagram.GETFILE, status)
+		if status == datagram.STATUS_SUCCESS {
+			res.SetFileBytes(fileBytes)
+		}
+	case datagram.DELETE:
+		status, err := commands.DELETE(msg.Filename)
+		if err != nil {
+			AppLog(conn.RemoteAddr().String(), "erro ao processar comando DELETE: %v", err)
+		}
+		res = *datagram.CreateRes(datagram.DELETE, status)
+
 	// case "CHDIR":
 	// 	response = commands.CHDIR(address, command, s.sessions)
 	// case "GETFILES":

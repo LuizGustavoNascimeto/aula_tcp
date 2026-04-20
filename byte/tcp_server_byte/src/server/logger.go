@@ -1,35 +1,35 @@
 package server
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"net"
-	"tcp_server_byte/src/datagram"
+	"os"
+	"sync"
 	"time"
+)
+
+var (
+	logFileName = "server_log.txt"
+	logMutex    sync.Mutex
 )
 
 func AppLog(origin string, format string, args ...interface{}) {
 	timestamp := time.Now().Format("2006/01/02 15:04:05")
 	msg := fmt.Sprintf(format, args...)
-	fmt.Printf("[%s][%s] %s\n", timestamp, origin, msg)
-}
+	line := fmt.Sprintf("[%s][%s] %s\n", timestamp, origin, msg)
 
-func (s *Server) WriteResponse(conn net.Conn, datagram *datagram.DatagramRes) {
-	response := []byte{
-		byte(datagram.MessageType),
-		byte(datagram.CommandID),
-		byte(datagram.StatusCode)}
-	_, err := conn.Write(response)
+	fmt.Print(line)
+
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	file, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		AppLog(conn.RemoteAddr().String(), "erro ao enviar resposta: %v", err)
-	}
-}
-func (s *Server) logReadError(conn net.Conn, err error) {
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		AppLog(originServer, "cliente %s desconectou", conn.RemoteAddr().String())
+		fmt.Printf("[%s][LOGGER] failed to open log file %s: %v\n", timestamp, logFileName, err)
 		return
 	}
+	defer file.Close()
 
-	AppLog(originServer, "erro de leitura em %s: %v", conn.RemoteAddr().String(), err)
+	if _, err := file.WriteString(line); err != nil {
+		fmt.Printf("[%s][LOGGER] failed to write log file %s: %v\n", timestamp, logFileName, err)
+	}
 }

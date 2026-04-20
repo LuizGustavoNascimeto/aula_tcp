@@ -1,0 +1,5 @@
+[2026/04/20 16:06:41][servidor] ouvindo em :8080
+[2026/04/20 16:06:48][servidor] nova conexao de 127.0.0.1:56605
+[2026/04/20 16:06:53][127.0.0.1:56605] TYPE_1 CMD_3 FILENAME_SIZE_0 FILENAME_
+[2026/04/20 16:09:54][servidor] cliente 127.0.0.1:56605 desconectou
+[2026/04/20 16:09:54][servidor] conexao encerrada com 127.0.0.1:56605

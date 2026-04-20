@@ -1,6 +1,11 @@
 package datagram
 
-import "fmt"
+import (
+	"bufio"
+	"encoding/binary"
+	"fmt"
+	"io"
+)
 
 type MessageType int8
 type CommandID int8
@@ -13,21 +18,29 @@ const (
 	DELETE          CommandID   = 2
 	GETFILESLIST    CommandID   = 3
 	GETFILE         CommandID   = 4
-	STATUS_SUCCESS  int8        = 0
-	STATUS_ERROR    int8        = 1
+	STATUS_SUCCESS  int8        = 1
+	STATUS_ERROR    int8        = 2
 )
 
+type FileStrcut struct {
+	FilenameSize uint8
+	Filename     string
+}
 type DatagramReq struct {
 	MessageType  MessageType
 	CommandID    CommandID
-	FilenameSize int8
+	FilenameSize uint8
 	Filename     string
 	fileSize     uint32
 }
 type DatagramRes struct {
-	MessageType MessageType
-	CommandID   CommandID
-	StatusCode  int8
+	MessageType   MessageType
+	CommandID     CommandID
+	StatusCode    int8
+	numberOfFiles uint16
+	files         []FileStrcut
+	fileSize      uint32
+	fileBytes     []byte
 }
 
 func ParseReq(data []byte) (*DatagramReq, error) {
@@ -37,16 +50,9 @@ func ParseReq(data []byte) (*DatagramReq, error) {
 	req := &DatagramReq{
 		MessageType:  MessageType(data[0]),
 		CommandID:    CommandID(data[1]),
-		FilenameSize: int8(data[2]),
-	}
-	if req.MessageType != REQ_CODE {
-		return nil, fmt.Errorf("INVALID_DATAGRAM_TYPE")
+		FilenameSize: uint8(data[2]),
 	}
 	return req, nil
-}
-
-func (res *DatagramReq) String() string {
-	return fmt.Sprintf("TYPE_%d CMD_%d FILENAME_SIZE_%d FILENAME_%s", res.MessageType, res.CommandID, res.FilenameSize, res.Filename)
 }
 
 func ParseRes(data []byte) (*DatagramRes, error) {
@@ -76,12 +82,81 @@ func (res *DatagramReq) GetFileSize() uint32 {
 	return res.fileSize
 }
 
-func (res *DatagramReq) SetFileSize(size uint32) {
-	if res.CommandID != ADDFILE {
+func (res *DatagramRes) SetFiles(files []FileStrcut) {
+	if res.CommandID != GETFILESLIST {
 		return
 	}
-	res.fileSize = size
+	res.numberOfFiles = uint16(len(files))
+	res.files = files
+
 }
 
-// o datagram deve ter 3 bytes de cabeçalho
-// E a té 256 bytes para o filename
+func (res *DatagramRes) SetFileBytes(file []byte) {
+	if res.CommandID != GETFILE {
+		return
+	}
+	res.fileSize = uint32(len(file))
+	res.fileBytes = file
+}
+
+func (res *DatagramReq) String() string {
+	return fmt.Sprintf("TYPE_%d CMD_%d FILENAME_SIZE_%d FILENAME_%s", res.MessageType, res.CommandID, res.FilenameSize, res.Filename)
+}
+
+func (req *DatagramReq) HandleFilename(reader *bufio.Reader) error {
+	// Lê o nome do arquivo, se houver
+	if req.FilenameSize <= 0 {
+		return nil
+	}
+	filenameBytes := make([]byte, int(req.FilenameSize))
+	if _, err := io.ReadFull(reader, filenameBytes); err != nil {
+		return err
+	}
+
+	req.Filename = string(filenameBytes)
+
+	if req.CommandID == ADDFILE {
+		// Para ADDFILE, também lemos os próximos 4 bytes para o tamanho do arquivo
+		fileSizeBytes := make([]byte, 4)
+		if _, err := io.ReadFull(reader, fileSizeBytes); err != nil {
+			return err
+		}
+		req.fileSize = binary.BigEndian.Uint32(fileSizeBytes)
+	}
+
+	return nil
+}
+
+func (res *DatagramRes) ToBytes() []byte {
+	payload := make([]byte, 3)
+	payload[0] = byte(res.MessageType)
+	payload[1] = byte(res.CommandID)
+	payload[2] = byte(res.StatusCode)
+	if res.CommandID == GETFILESLIST && res.StatusCode == STATUS_SUCCESS {
+		// Serializa apenas nomes válidos no protocolo: tamanho entre 1 e 255 bytes.
+		validFiles := make([][]byte, 0, len(res.files))
+		for _, file := range res.files {
+			nameBytes := []byte(file.Filename)
+			if len(nameBytes) < 1 || len(nameBytes) > 255 {
+				continue
+			}
+			validFiles = append(validFiles, nameBytes)
+		}
+
+		numberOfFilesBytes := make([]byte, 2)
+		binary.BigEndian.PutUint16(numberOfFilesBytes, uint16(len(validFiles)))
+		payload = append(payload, numberOfFilesBytes...)
+
+		for _, filenameBytes := range validFiles {
+			payload = append(payload, byte(len(filenameBytes)))
+			payload = append(payload, filenameBytes...)
+		}
+	}
+	if res.CommandID == GETFILE && res.StatusCode == STATUS_SUCCESS {
+		fileSizeBytes := make([]byte, 4)
+		binary.BigEndian.PutUint32(fileSizeBytes, res.fileSize)
+		payload = append(payload, fileSizeBytes...)
+		payload = append(payload, res.fileBytes...)
+	}
+	return payload
+}

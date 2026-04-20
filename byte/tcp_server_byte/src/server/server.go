@@ -2,7 +2,6 @@ package server
 
 import (
 	"bufio"
-	"encoding/binary"
 	"io"
 	"net"
 	"tcp_server_byte/src/buffer"
@@ -71,31 +70,6 @@ func (s *Server) readRequest(reader *bufio.Reader) (*datagram.DatagramReq, error
 		return nil, err
 	}
 
-	handleSpecialHeaders(message, reader)
+	message.HandleFilename(reader)
 	return message, nil
-}
-
-func handleSpecialHeaders(message *datagram.DatagramReq, reader *bufio.Reader) error {
-	// Lê o nome do arquivo, se houver
-	if message.FilenameSize <= 0 {
-		return nil
-	}
-	filenameBytes := make([]byte, int(message.FilenameSize))
-	if _, err := io.ReadFull(reader, filenameBytes); err != nil {
-		return err
-	}
-
-	message.Filename = string(filenameBytes)
-
-	switch message.CommandID {
-	case datagram.ADDFILE:
-		// Para ADDFILE, também lemos os próximos 4 bytes para o tamanho do arquivo
-		fileSizeBytes := make([]byte, 4)
-		if _, err := io.ReadFull(reader, fileSizeBytes); err != nil {
-			return err
-		}
-		message.SetFileSize(binary.BigEndian.Uint32(fileSizeBytes))
-	}
-
-	return nil
 }
